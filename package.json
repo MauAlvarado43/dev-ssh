@@ -1,0 +1,89 @@
+{
+  "name": "dev-ssh",
+  "displayName": "Dev SSH",
+  "description": "%extension.description%",
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.1.3",
+  "publisher": "raide",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MauAlvarado43/dev-ssh.git"
+  },
+  "keywords": ["vscode-extension", "ssh", "remote", "servers", "pem"],
+  "engines": { "vscode": "^1.95.0" },
+  "categories": ["Other"],
+  "main": "./dist/extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "commands": [
+      { "command": "devSsh.addGroup", "title": "%command.addGroup.title%", "category": "Dev SSH", "icon": "$(new-folder)" },
+      { "command": "devSsh.addServer", "title": "%command.addServer.title%", "category": "Dev SSH", "icon": "$(add)" },
+      { "command": "devSsh.searchServers", "title": "%command.searchServers.title%", "category": "Dev SSH", "icon": "$(search)" },
+      { "command": "devSsh.refresh", "title": "%command.refresh.title%", "category": "Dev SSH", "icon": "$(refresh)" }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "devSsh", "title": "Dev SSH", "icon": "media/dev-ssh-mark.svg" }
+      ]
+    },
+    "views": {
+      "devSsh": [
+        { "id": "devSsh.servers", "name": "%view.servers.name%", "type": "webview" }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        { "command": "devSsh.searchServers", "when": "view == devSsh.servers", "group": "navigation@1" },
+        { "command": "devSsh.addServer", "when": "view == devSsh.servers", "group": "navigation@2" },
+        { "command": "devSsh.addGroup", "when": "view == devSsh.servers", "group": "navigation@3" },
+        { "command": "devSsh.refresh", "when": "view == devSsh.servers", "group": "navigation@4" }
+      ]
+    },
+    "configuration": {
+      "title": "%configuration.title%",
+      "properties": {
+        "devSsh.language": {
+          "type": "string",
+          "default": "en",
+          "enum": ["en", "es"],
+          "enumDescriptions": ["%configuration.language.english%", "%configuration.language.spanish%"],
+          "description": "%configuration.language.description%"
+        },
+        "devSsh.sshPath": {
+          "type": "string",
+          "default": "ssh",
+          "description": "%configuration.sshPath.description%"
+        },
+        "devSsh.defaultUser": {
+          "type": "string",
+          "default": "",
+          "description": "%configuration.defaultUser.description%"
+        },
+        "devSsh.confirmBeforeRemove": {
+          "type": "boolean",
+          "default": true,
+          "description": "%configuration.confirmBeforeRemove.description%"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "pnpm run build:extension && pnpm run build:webview",
+    "build:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=node20 --sourcemap --minify",
+    "build:webview": "esbuild src/presentation/webview/main.ts --bundle --outfile=dist/webview.js --format=iife --platform=browser --target=es2022 --sourcemap --minify --loader:.css=css",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test:clean": "node -e \"require('fs').rmSync('dist/test',{recursive:true,force:true})\"",
+    "test": "pnpm run test:clean && tsc -p tsconfig.test.json && node --test dist/test/test/*.test.js",
+    "check": "pnpm run typecheck && pnpm run test && pnpm run build",
+    "package": "pnpm run check && vsce package --no-dependencies --out dist/dev-ssh.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "@types/vscode": "^1.95.0",
+    "@vscode/vsce": "^3.6.0",
+    "esbuild": "^0.25.9",
+    "typescript": "^5.9.2"
+  }
+}

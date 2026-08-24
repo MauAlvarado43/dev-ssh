@@ -1,0 +1,15 @@
+{
+  "extension.description": "Organize SSH servers and connect to them from a VS Code terminal.",
+  "command.addGroup.title": "New server group",
+  "command.addServer.title": "Add server",
+  "command.searchServers.title": "Search servers",
+  "command.refresh.title": "Refresh",
+  "view.servers.name": "Servers",
+  "configuration.title": "Dev SSH",
+  "configuration.language.english": "English",
+  "configuration.language.spanish": "Spanish",
+  "configuration.language.description": "Language used by Dev SSH.",
+  "configuration.sshPath.description": "Path or command used to launch the SSH client.",
+  "configuration.defaultUser.description": "User prefilled when adding a server.",
+  "configuration.confirmBeforeRemove.description": "Ask for confirmation before removing groups or servers."
+}

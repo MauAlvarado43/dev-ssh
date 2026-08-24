@@ -1,0 +1,13 @@
+:root {
+  color-scheme: light dark; --radius: 10px;
+  --accent-0: #7c6df2; --accent-1: #4bbca2; --accent-2: #e39a4d; --accent-3: #db6d8e;
+  --accent-4: #52a8df; --accent-5: #a678dc; --accent-6: #8fbd55; --accent-7: #e06b61;
+}
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body { margin: 0; color: var(--vscode-foreground); background: var(--vscode-sideBar-background); font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); overflow-x: hidden; }
+button, input, select { font: inherit; } button { color: inherit; }
+.icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+.icon .fill, .fill { fill: currentColor; stroke: none; }
+mark { color: inherit; background: color-mix(in srgb, var(--vscode-editor-findMatchHighlightBackground, #e2b93d) 65%, transparent); border-radius: 2px; }

@@ -1,0 +1,1 @@
+@media (max-width: 240px) { .brand-subtitle, .server-address, .group-count { display: none; }.shell { padding-inline: 8px; }.row-actions .server-drag-handle { display: none; }.split-fields { grid-template-columns: 1fr; } }
