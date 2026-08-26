@@ -1,4 +1,6 @@
 import type * as vscode from 'vscode';
+import { join } from 'node:path';
+import { LocalState } from './backup/local-data';
 import type { DevSshState, DropPosition, ServerDraft } from '../core/types';
 import {
   addServer, createGroup, findServer, moveServer, normalizeState, removeGroup, removeServer,
@@ -7,16 +9,19 @@ import {
 
 /** The only write path for persisted Dev SSH state. */
 export class ServerStore {
-  private state: DevSshState;
-  private pendingWrite: Promise<void> = Promise.resolve();
+  private constructor(private readonly data: LocalState<DevSshState>) {}
 
-  constructor(private readonly memento: vscode.Memento) {
-    this.state = normalizeState(memento.get<unknown>(STATE_KEY));
+  static async create(memento: vscode.Memento, root: string): Promise<ServerStore> {
+    const data = new LocalState(join(root, 'state-v1.json'), normalizeState(memento.get<unknown>(STATE_KEY)));
+    await data.initialize();
+    return new ServerStore(data);
   }
+  onDidChangeExternal(listener: () => void): vscode.Disposable { return this.data.onDidChange(listener); }
+  dispose(): void { this.data.dispose(); }
 
-  get snapshot(): Readonly<DevSshState> { return this.state; }
-  getServer(id: string): LocatedServer | undefined { return findServer(this.state, id); }
-  hasGroup(id: string): boolean { return this.state.groups.some((group) => group.id === id); }
+  get snapshot(): Readonly<DevSshState> { return this.data.snapshot; }
+  getServer(id: string): LocatedServer | undefined { return findServer(this.data.snapshot, id); }
+  hasGroup(id: string): boolean { return this.data.snapshot.groups.some((group) => group.id === id); }
 
   async addGroup(name: string): Promise<{ id: string; name: string }> {
     let created = { id: '', name: '' };
@@ -43,13 +48,6 @@ export class ServerStore {
   async removeServer(id: string): Promise<void> { await this.mutate((state) => removeServer(state, id)); }
 
   private mutate(change: (state: DevSshState) => void): Promise<void> {
-    const operation = this.pendingWrite.then(async () => {
-      const next = structuredClone(this.state);
-      change(next);
-      await this.memento.update(STATE_KEY, next);
-      this.state = next;
-    });
-    this.pendingWrite = operation.catch(() => undefined);
-    return operation;
+    return this.data.update(change);
   }
 }

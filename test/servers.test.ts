@@ -69,3 +69,21 @@ test('normalizes malformed persisted state and drops duplicate connections', () 
   assert.equal(state.groups[0]?.servers.length, 1);
   assert.equal(state.servers.length, 0);
 });
+
+test('legacy Memento migrates once to private storage and concurrent stores retain changes', async () => {
+  const { mkdtemp, rm, readFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { ServerStore } = await import('../src/infrastructure/server-store');
+  const root = await mkdtemp(join(tmpdir(), 'dev-ssh-migration-'));
+  const legacy = { version: 1, groups: [{ id: 'original', name: 'Legacy', color: 0, servers: [] }], servers: [] };
+  const memento = { get: () => structuredClone(legacy), update: async () => { throw new Error('Must not write to Memento'); }, keys: () => [] } as unknown as import('vscode').Memento;
+  const first = await ServerStore.create(memento, root);
+  const second = await ServerStore.create(memento, root);
+  try {
+    await Promise.all([first.addGroup('Window A'), second.addGroup('Window B')]);
+    const state = JSON.parse(await readFile(join(root, 'state-v1.json'), 'utf8')) as { groups: { name: string }[] };
+    assert.deepEqual(state.groups.map((g) => g.name).sort(), ['Legacy', 'Window A', 'Window B']);
+    assert.equal(legacy.groups.length, 1);
+  } finally { first.dispose(); second.dispose(); await rm(root, { recursive: true, force: true }); }
+});

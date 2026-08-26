@@ -1,18 +1,68 @@
-name: CI
+name: Validate and release
+
 on:
-  push:
   pull_request:
+  push:
+    branches:
+      - main
+
 jobs:
-  check:
+  validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
         with:
           version: 11.1.3
-      - uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run check
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate project
+        run: pnpm run check
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Package extension
+        run: pnpm run package
+      - name: Extract release notes
+        run: node scripts/extract-release-notes.mjs dist/release-notes.md
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="v${VERSION}"
+          ASSET="dist/dev-ssh-${VERSION}.vsix"
+          mv dist/dev-ssh.vsix "$ASSET"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ASSET" --clobber
+          else
+            gh release create "$TAG" "$ASSET" --title "Dev SSH ${VERSION}" --notes-file dist/release-notes.md
+          fi

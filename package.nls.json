@@ -11,5 +11,16 @@
   "configuration.language.description": "Language used by Dev SSH.",
   "configuration.sshPath.description": "Path or command used to launch the SSH client.",
   "configuration.defaultUser.description": "User prefilled when adding a server.",
-  "configuration.confirmBeforeRemove.description": "Ask for confirmation before removing groups or servers."
+  "configuration.confirmBeforeRemove.description": "Ask for confirmation before removing groups or servers.",
+  "command.connectDrive.title": "Connect Google Drive",
+  "command.disconnectDrive.title": "Disconnect Google Drive",
+  "command.backupNow.title": "Create backup now",
+  "command.restoreBackup.title": "Restore backup",
+  "command.setBackupPassphrase.title": "Set backup passphrase (optional)",
+  "command.backupStatus.title": "Show backup status",
+  "configuration.environment.description": "Data environment. Only local private extension storage is available; Supabase is not implemented.",
+  "configuration.backup.autoEnabled.description": "Create snapshots while VS Code is open; upload them when Drive is connected. Disabled by default. Unencrypted backups may contain readable secrets.",
+  "configuration.backup.intervalMinutes.description": "Minutes between automatic backups when data changes. Failed uploads are retried without replacing old snapshots.",
+  "configuration.backup.encrypt.description": "Optional passphrase encryption. Off by default: recovery only needs the backup file. If enabled, keep the passphrase outside this PC.",
+  "configuration.backup.includePrivateKeys.description": "Include managed SSH private keys. Requires optional encryption and a recovery passphrase."
 }

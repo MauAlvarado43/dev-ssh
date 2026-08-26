@@ -11,5 +11,16 @@
   "configuration.language.description": "Idioma usado por Dev SSH.",
   "configuration.sshPath.description": "Ruta o comando usado para iniciar el cliente SSH.",
   "configuration.defaultUser.description": "Usuario precargado al agregar un servidor.",
-  "configuration.confirmBeforeRemove.description": "Pedir confirmación antes de quitar grupos o servidores."
+  "configuration.confirmBeforeRemove.description": "Pedir confirmación antes de quitar grupos o servidores.",
+  "command.connectDrive.title": "Conectar Google Drive",
+  "command.disconnectDrive.title": "Desconectar Google Drive",
+  "command.backupNow.title": "Crear backup ahora",
+  "command.restoreBackup.title": "Restaurar backup",
+  "command.setBackupPassphrase.title": "Configurar contraseña del backup (opcional)",
+  "command.backupStatus.title": "Mostrar estado de backups",
+  "configuration.environment.description": "Entorno de datos. Sólo está disponible la carpeta privada local de la extensión; Supabase no está implementado.",
+  "configuration.backup.autoEnabled.description": "Crear snapshots mientras VS Code esté abierto; subirlos cuando Drive esté conectado. Desactivado por defecto. Los backups sin cifrado pueden contener secretos legibles.",
+  "configuration.backup.intervalMinutes.description": "Minutos entre backups automáticos cuando cambian los datos. Se reintentan las subidas fallidas sin reemplazar snapshots anteriores.",
+  "configuration.backup.encrypt.description": "Cifrado opcional con contraseña. Desactivado por defecto: para recuperar basta el archivo. Si lo activas, guarda la contraseña fuera de esta PC.",
+  "configuration.backup.includePrivateKeys.description": "Incluir las llaves privadas SSH administradas. Requiere activar el cifrado opcional y definir una contraseña de recuperación."
 }

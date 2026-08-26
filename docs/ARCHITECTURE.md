@@ -5,7 +5,7 @@
 The webview sends typed `ClientMessage` objects to the extension host. `AppController` applies pure domain rules through `ServerStore`, which serializes writes to VS Code global storage. A fresh `ViewState` is then projected and sent back to the webview.
 
 ```text
-Webview -> ClientMessage -> AppController -> ServerStore -> globalState
+Webview -> ClientMessage -> AppController -> ServerStore -> private state-v1.json
    ^                                                          |
    +--------------------- ViewState (HostMessage) ------------+
 ```
@@ -31,3 +31,7 @@ The selected private key is imported into an extension-owned directory under VS 
 - The webview renders `ViewState`; it does not read files or extension state.
 - SSH commands are assembled from an argument array and quoted for the active shell.
 - User-facing text belongs in the typed catalog.
+
+## Backup boundary
+
+`initializeLocal` resolves the private active data generation. `BackupController` owns local snapshots, optional passphrase encryption, OAuth/Drive transport, scheduled retries and restore commands. Extension-specific adapters capture only owned data. Restore stages a new generation and switches `active-data.json`, retaining the original files. JSON/SQLite writers in the old generation reject writes until reload; other windows and MCP clients must be restarted. The backup core is vendored so each extension remains independently buildable. See [BACKUPS.md](BACKUPS.md).

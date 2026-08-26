@@ -23,3 +23,7 @@ pnpm run check
 ```
 
 Press `F5` in VS Code to launch an Extension Development Host.
+
+## Private storage and Google Drive backups
+
+The `local` environment supports manual snapshots, optional automatic backups, Google Drive authorization, and restoration on another computer. Backups have no additional encryption by default; passphrase encryption is optional. No account is connected or automatic upload enabled by installation alone. See [backup setup and recovery](docs/BACKUPS.md), including exclusions and limits. Supabase is not implemented yet.
