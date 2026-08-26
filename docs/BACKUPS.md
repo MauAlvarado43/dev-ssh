@@ -1,46 +1,46 @@
-# Almacenamiento local y backups con Google Drive
+# Local storage and Google Drive backups
 
-## Qué está implementado
+## What is implemented
 
-Las cinco extensiones usan su propia carpeta privada de VS Code (`ExtensionContext.globalStorageUri`). El único entorno disponible es `local`. Drive guarda snapshots independientes; no sincroniza ni fusiona las bases activas entre computadoras. Supabase sigue pendiente.
+Each of the five extensions uses its own private VS Code directory (`ExtensionContext.globalStorageUri`). The only available environment is `local`. Drive stores independent snapshots; it does not synchronize or merge active databases across computers. Supabase remains deferred.
 
-SSH y Commands migran sus datos de `globalState` a JSON privado. Las copias antiguas de Memento no se borran, pero tampoco se siguen actualizando: una versión anterior de la extensión no verá automáticamente los cambios posteriores a la migración. Folder conserva su JSON compartido y Tracker su SQLite. Notes copia una configuración antigua de `storagePath` a la carpeta privada una sola vez, dejando intacta la carpeta original; si hay datos tanto en origen como en destino, detiene la migración para no mezclarlos silenciosamente. Cierra las demás ventanas de VS Code durante la primera actualización.
+SSH and Commands migrate their data from `globalState` to private JSON files. Old Memento copies are retained but no longer updated, so an older extension version will not automatically see changes made after migration. Folder keeps its shared JSON file and Tracker keeps SQLite. Notes copies a legacy `storagePath` into the private directory once and leaves the source intact; if both source and destination contain data, migration stops instead of silently merging them. Close other VS Code windows during the first update.
 
-Las preferencias que antes se guardaban en Memento viven en `preferences.json`. Las configuraciones declaradas en Settings siguen siendo configuraciones normales de VS Code. Los tokens OAuth y la contraseña opcional se guardan en **SecretStorage**, nunca dentro de un backup.
+Preferences previously stored in Memento now live in `preferences.json`. Settings declared in the extension manifest remain regular VS Code settings. OAuth tokens and the optional passphrase are stored in **SecretStorage**, never in a backup.
 
-## Sin contraseña adicional por defecto
+## No extra passphrase by default
 
-`backup.encrypt` está desactivado. Un archivo `.devbackup` normal contiene un manifiesto JSON comprimido y los archivos, con hashes de integridad. Puede restaurarse en otra PC sin la máquina original ni sus credenciales. El formato sin cifrar es `DEVBACKUP0\n` seguido de gzip de JSON; los archivos están en base64 dentro del manifiesto y no dependen de una clave oculta. La compresión **no** es cifrado: quien obtenga el archivo puede leerlo.
+`backup.encrypt` is disabled by default. A regular `.devbackup` contains a compressed JSON manifest and files with integrity hashes. It can be restored on another computer without the original machine or its credentials. The unencrypted format is `DEVBACKUP0\n` followed by gzipped JSON; file contents are base64 encoded in the manifest and do not depend on a hidden key. Compression **is not** encryption: anyone who obtains the file can read it.
 
-Las notas, comandos, variables y respuestas recordadas pueden incluir secretos. Revisa lo que guardas y protege tu cuenta de Drive. Las llaves privadas SSH se excluyen por defecto. Para incluirlas hay que activar `devSsh.backup.includePrivateKeys` junto con el cifrado opcional y configurar una contraseña conservada fuera de esta PC. Los archivos externos de proyectos, repositorios y scripts no se copian.
+Notes, commands, variables, and remembered answers may contain secrets. Review what you store and protect your Drive account. SSH private keys are excluded by default. To include managed keys, enable both `devSsh.backup.includePrivateKeys` and optional encryption, then set a passphrase kept outside this computer. External project, repository, and script files are never copied.
 
-Si activas cifrado opcional, se usa AES-256-GCM con clave derivada de tu contraseña mediante scrypt y salt aleatorio. La restauración pide la contraseña original, no la contraseña de Google ni una clave exclusiva del dispositivo. Cambiarla afecta a futuros backups; los antiguos conservan la anterior.
+Optional encryption uses AES-256-GCM with a key derived from your passphrase through scrypt and a random salt. Restore asks for the original passphrase, not your Google password or a device-specific key. Changing the passphrase affects future backups; older backups retain their previous passphrase.
 
-## Preparar Google Drive
+## Set up Google Drive
 
-No necesitas un servidor, Supabase ni rclone. Sí necesitas una aplicación OAuth de Google:
+You do not need a server, Supabase, or rclone. You do need a Google OAuth application:
 
-1. Abre [Google Cloud Console](https://console.cloud.google.com/) y crea o selecciona un proyecto propio.
-2. Habilita **Google Drive API**.
-3. Configura el consentimiento en **Google Auth Platform**. Para pruebas personales, agrega tu cuenta como usuario de prueba si corresponde.
-4. Crea un **OAuth Client ID** de tipo **Desktop app / Aplicación de escritorio**. No elijas cuenta de servicio ni aplicación web.
-5. Descarga su JSON. Conserva una copia segura accesible desde otra PC o conserva acceso al proyecto de Google Cloud. No lo publiques en Git ni lo pegues en un chat.
-6. En una ventana local de VS Code, abre la paleta de comandos y ejecuta **[nombre de extensión]: Conectar Google Drive**. Selecciona ese JSON y autoriza tu cuenta en el navegador.
-7. Ejecuta **Crear backup ahora** y revisa **Mostrar estado de backups**. Confirma que aparezca una subida remota completada y que el archivo exista en Drive antes de depender del respaldo.
+1. Open [Google Cloud Console](https://console.cloud.google.com/) and create or select your own project.
+2. Enable the **Google Drive API**.
+3. Configure consent in **Google Auth Platform**. For personal testing, add your account as a test user when applicable.
+4. Create an **OAuth Client ID** of type **Desktop app**. Do not choose a service account or web application.
+5. Download its JSON file. Keep a safe copy that is accessible from another computer, or retain access to the Google Cloud project. Do not commit it to Git or paste it into a chat.
+6. In a local VS Code window, open the Command Palette and run **[extension name]: Connect Google Drive**. Select the JSON file and authorize your account in the browser.
+7. Run **Create backup now** and inspect **Show backup status**. Confirm that a remote upload completed and that the file exists in Drive before relying on the backup.
 
-La autorización usa navegador, callback en `127.0.0.1`, PKCE y el scope `drive.file`. Sólo pide acceso a archivos creados/autorizados para esta aplicación. No usa la contraseña de Google dentro de VS Code. Las credenciales de escritorio y los tokens quedan en SecretStorage. [Flujo oficial OAuth Desktop](https://developers.google.com/identity/protocols/oauth2/native-app), [scope de Drive](https://developers.google.com/workspace/drive/api/guides/api-specific-auth).
+Authorization uses the browser, a `127.0.0.1` callback, PKCE, and the `drive.file` scope. It only requests access to files created or authorized for this application. Your Google password is never entered in VS Code. Desktop credentials and tokens remain in SecretStorage. See Google's [OAuth 2.0 for desktop apps](https://developers.google.com/identity/protocols/oauth2/native-app) and [Drive scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth).
 
-Puedes reutilizar el mismo cliente OAuth para las cinco extensiones. Cada extensión se conecta por separado y filtra sus propios backups por ID. Los archivos aparecen en Mi unidad con el ID de la extensión, dispositivo, fecha e ID único en el nombre. No se sobrescribe un `backup.zip` global.
+You can reuse one OAuth client for all five extensions. Each extension authorizes separately and filters backups by its own ID. Files appear in My Drive with the extension ID, device, date, and a unique ID in the filename. There is no shared `backup.zip` that every device overwrites.
 
-**Atención al modo Testing:** para una aplicación OAuth externa en pruebas que solicita acceso a Drive, Google limita normalmente el refresh token a siete días. Esto exige volver a autorizar. Para respaldo habitual, revisa el estado de publicación y los requisitos que Google indique para tu proyecto; los tokens también pueden caducar o revocarse por otras causas. [Caducidad de tokens de Google](https://developers.google.com/identity/protocols/oauth2#expiration).
+**OAuth testing mode:** Google normally limits refresh tokens to seven days for an external app in testing that requests Drive access. You will have to authorize again. For routine backups, review the publication status and any requirements Google shows for your project. Tokens can also expire or be revoked for other reasons. See [Google token expiration](https://developers.google.com/identity/protocols/oauth2#expiration).
 
-El inicio de sesión de esta primera versión requiere una ventana local de VS Code. No está soportado desde hosts Remote SSH/WSL/Containers porque el callback loopback no necesariamente llega al navegador de la misma máquina.
+This first version requires a local VS Code window for sign-in. Remote SSH, WSL, and Dev Container hosts are not supported because the loopback callback may not reach a browser on the same machine.
 
-## Configuración
+## Settings
 
-Sustituye `PREFIJO` por el namespace correspondiente:
+Replace `PREFIX` with the corresponding namespace:
 
-| Extensión | PREFIJO |
+| Extension | `PREFIX` |
 |---|---|
 | Dev SSH | `devSsh` |
 | Dev Commands | `devCommands` |
@@ -48,15 +48,15 @@ Sustituye `PREFIJO` por el namespace correspondiente:
 | Dev Notes | `devNotes` |
 | DevTracker | `devtracker` |
 
-| Configuración | Valor inicial | Uso |
+| Setting | Default | Purpose |
 |---|---|---|
-| `PREFIJO.environment` | `local` | Carpeta privada; Supabase no es seleccionable todavía. |
-| `PREFIJO.backup.autoEnabled` | `false` | Activa snapshots automáticos mientras esté activo el host de la extensión. |
-| `PREFIJO.backup.intervalMinutes` | `30` | Intervalo entre 5 y 1440 minutos; sólo crea otra versión si hay cambios. |
-| `PREFIJO.backup.encrypt` | `false` | Contraseña adicional opcional. Configurarla no activa el cifrado por sí solo. |
-| `devSsh.backup.includePrivateKeys` | `false` | Incluir copias administradas de llaves; requiere cifrado. |
+| `PREFIX.environment` | `local` | Private local directory; Supabase cannot be selected yet. |
+| `PREFIX.backup.autoEnabled` | `false` | Enables automatic snapshots while the extension host is active. |
+| `PREFIX.backup.intervalMinutes` | `30` | Interval from 5 to 1440 minutes; creates another version only when data changed. |
+| `PREFIX.backup.encrypt` | `false` | Optional extra passphrase. Setting a passphrase does not enable encryption by itself. |
+| `devSsh.backup.includePrivateKeys` | `false` | Includes managed key copies; requires encryption. |
 
-Ejemplo para Tracker:
+Tracker example:
 
 ```json
 {
@@ -67,70 +67,70 @@ Ejemplo para Tracker:
 }
 ```
 
-Los backups automáticos están desactivados hasta que tú los habilites. Las extensiones se activan al terminar de iniciar VS Code; Tracker conserva su opción de captura de actividad. El temporizador revisa cada minuto si toca hacer un backup; no ejecuta nada con VS Code cerrado. Un respaldo sin Drive conectado sigue siendo **sólo local** y no protege ante la muerte del disco.
+Automatic backups remain disabled until you enable them. The extensions activate after VS Code finishes starting; Tracker retains its activity-capture option. A timer checks every minute whether a backup is due and does nothing while VS Code is closed. A backup created without Drive connected remains **local only** and will not protect against disk failure.
 
-Si Drive falla, se conserva el snapshot local como pendiente y se siguen creando nuevos backups locales cuando cambian los datos. En posteriores ejecuciones se reintentan subidas pendientes, con un máximo de cinco históricas por ejecución. La subida usa una sesión resumable y verifica tamaño y MD5 devueltos por Drive; un fallo reinicia el envío del snapshot, no sustituye archivos anteriores. [API de subida](https://developers.google.com/workspace/drive/api/guides/manage-uploads).
+When Drive fails, the local snapshot remains pending and new local backups continue to be created when data changes. Later runs retry pending uploads, up to five historical snapshots per run. Uploads use a resumable session and verify the size and MD5 returned by Drive. A failure restarts that snapshot's upload and never replaces an older file. See the [Drive upload API](https://developers.google.com/workspace/drive/api/guides/manage-uploads).
 
-## Comandos
+## Commands
 
-- **Conectar Google Drive**: importar credencial Desktop y autorizar en navegador.
-- **Desconectar Google Drive**: quitar credenciales/tokens de esta instalación; no borrar backups ni revocar los de otras PCs. La revocación global se hace desde tu cuenta de Google.
-- **Crear backup ahora**: crear copia local y subirla si Drive está conectado; requiere confirmación.
-- **Restaurar backup**: elegir archivo local o uno de los 100 backups más recientes de Drive.
-- **Configurar contraseña del backup (opcional)**: guardar una contraseña para futuros backups cifrados, confirmándola dos veces.
-- **Mostrar estado de backups**: ver carpeta de datos activa, último archivo local, última subida completada y errores registrados.
+- **Connect Google Drive**: import Desktop credentials and authorize in the browser.
+- **Disconnect Google Drive**: remove credentials and tokens from this installation without deleting backups or revoking other computers. Revoke global access from your Google account.
+- **Create backup now**: create a local snapshot and upload it when Drive is connected; requires confirmation.
+- **Restore backup**: choose a local file or one of the 100 most recent Drive backups.
+- **Set backup passphrase (optional)**: save a passphrase for future encrypted backups after entering it twice.
+- **Show backup status**: show the active data directory, latest local snapshot, latest completed upload, and recorded errors.
 
-## Qué se incluye
+## Included data
 
-| Extensión | Datos incluidos | Exclusiones |
+| Extension | Included | Excluded |
 |---|---|---|
-| SSH | Servidores, grupos, preferencias; llaves sólo si lo habilitas | Llaves privadas por defecto; llaves externas no administradas siempre |
-| Commands | Espacios, comandos, scripts embebidos, parámetros, respuestas recordadas y preferencias | Archivos de scripts externos y contenido de repositorios |
-| Folder | Proyectos, agrupaciones, orden, colores y preferencias | Los archivos de las carpetas de proyectos |
-| Notes | Notebooks, Markdown, pizarrones editables, adjuntos ocultos y notebooks vacíos | Cambios aún no guardados; se pide guardar antes del snapshot |
-| Tracker | Export lógico consistente de SQLite, tareas, notas, actividad, métricas y adjuntos guardados | Repositorios y adjuntos de borradores no guardados |
+| SSH | Servers, groups, preferences, and keys only when enabled | Private keys by default; unmanaged external keys always |
+| Commands | Workspaces, commands, embedded scripts, parameters, remembered answers, and preferences | External script files and repository contents |
+| Folder | Projects, groups, order, colors, and preferences | Files inside project directories |
+| Notes | Notebooks, Markdown, editable boards, hidden attachments, and empty notebooks | Unsaved changes; saving is requested before capture |
+| Tracker | A consistent logical SQLite export, tasks, notes, activity, metrics, and saved attachments | Repositories and attachments in unsaved drafts |
 
-Los datos y archivos se comparan durante la captura para detectar cambios concurrentes. Tracker exporta dentro de una transacción de lectura, no copia un `.sqlite3` activo sin su WAL. Si cambian datos o falta un adjunto durante la captura, el backup falla claramente en vez de publicarse como completo.
+Data and files are compared during capture to detect concurrent changes. Tracker exports inside a read transaction instead of copying an active `.sqlite3` file without its WAL. If data changes or an attachment disappears during capture, the backup fails clearly instead of being published as complete.
 
-## Recuperar después de perder una PC
+## Recover after losing a computer
 
-### Sin configurar OAuth de nuevo
+### Without setting up OAuth again
 
-1. Entra a Google Drive desde el navegador y descarga el `.devbackup` de la extensión.
-2. Instala esa extensión en la nueva PC.
-3. Ejecuta **Restaurar backup → Archivo local** y elige el archivo.
-4. Si es un backup normal, no pide ninguna contraseña adicional. Si lo creaste cifrado, pide la que conservaste por separado.
-5. Guarda los documentos abiertos y cierra otras ventanas/MCP. Confirma la restauración.
-6. La ventana se recarga usando los datos restaurados. Repite para cada extensión que necesites.
+1. Open Google Drive in a browser and download the extension's `.devbackup` file.
+2. Install the extension on the new computer.
+3. Run **Restore backup → Local file** and choose the downloaded file.
+4. A regular backup needs no additional passphrase. An encrypted backup asks for the passphrase you stored separately.
+5. Save open documents and close other windows and MCP processes. Confirm restore.
+6. The window reloads with the restored data. Repeat for every extension you need.
 
-### Desde el selector integrado de Drive
+### From the built-in Drive picker
 
-Conecta la misma cuenta con el mismo cliente OAuth, elige **Restaurar backup → Google Drive** y selecciona un snapshot. Si cambiaste de cliente OAuth, los permisos `drive.file` pueden no permitir listar archivos de la aplicación anterior: usa la descarga desde el navegador y restauración local.
+Connect the same account with the same OAuth client, choose **Restore backup → Google Drive**, and select a snapshot. If you changed OAuth clients, `drive.file` permissions may not list files created by the previous application. Download the file in a browser and use local restore instead.
 
-La restauración crea `restored/<uuid>` dentro de la carpeta privada y cambia el puntero `active-data.json` sólo cuando termina la validación. Los archivos anteriores quedan intactos. Los stores antiguos de JSON y SQLite rechazan nuevas escrituras cuando se activa el cambio. Los editores de notas que quedaron abiertos pueden seguir apuntando a la generación anterior: cierra las otras ventanas, no continúes editando allí y recárgalas.
+Restore creates `restored/<uuid>` in the private directory and switches `active-data.json` only after validation completes. Previous files remain intact. Old JSON and SQLite stores reject new writes once the switch is active. Note editors that remain open may still point to the previous generation: close other windows, stop editing them, and reload.
 
-Se recalculan las rutas de llaves y adjuntos administrados. Las rutas externas de proyectos, scripts, shells e intérpretes **no** se adivinan: actualízalas para la nueva PC. Las llaves excluidas deben volver a seleccionarse. Para Tracker, reinicia los clientes MCP y vuelve a copiar la configuración desde la extensión: una configuración con una ruta explícita antigua debe actualizarse.
+Paths for managed keys and attachments are recalculated. External project, script, shell, and interpreter paths are **not** guessed; update them for the new computer. Excluded keys must be selected again. For Tracker, restart MCP clients and copy the configuration from the extension again. Any configuration containing an explicit old path must be updated.
 
-No se restauran tokens de Google ni la identidad del dispositivo anterior. Una nueva instalación genera su propio ID y una autorización nueva; esto no impide leer los archivos de backup antiguos.
+Google tokens and the previous device identity are not restored. A new installation creates its own device ID and authorization; this does not prevent it from reading old backup files.
 
-## Límites y operación
+## Limits and operation
 
-- Máximo inicial: **64 MiB de contenido sin comprimir y 10000 entradas** por snapshot; el manifiesto descomprimido tiene otro límite de 128 MiB. Si los supera, se informa un error, no se recorta el backup.
-- No se siguen symlinks ni se extraen rutas absolutas o con traversal. Los hashes detectan daños accidentales. Un backup sin cifrado no ofrece autenticidad frente a alguien que pueda modificar el archivo: restaura sólo copias confiables.
-- **No se borran automáticamente backups antiguos** en esta primera versión. Vigila el espacio local y de Drive y elimina copias antiguas sólo después de verificar que puedes recuperar una reciente. Las carpetas de generaciones anteriores tampoco se eliminan automáticamente.
-- Los archivos OAuth, tokens, contraseña opcional, cachés, temporales y binarios de runtime no forman parte del paquete.
-- El VSIX de Tracker generado en esta máquina incluye SQLite nativo para Linux x64. En otros sistemas hay que instalar o compilar una versión compatible; el formato de los backups sí es portable.
-- Los backups no incluyen la extensión instalada: reinstala un VSIX compatible antes de restaurar. Se valida el ID de la extensión y la versión del esquema.
-- Dos PCs producen snapshots distintos. Esto **no** resuelve cambios simultáneos como lo hará un futuro servicio de sincronización; elige conscientemente qué snapshot restaurar.
-- Después de un cierre abrupto muy concreto puede quedar una guarda `.lock.recovering` y bloquear escrituras. No la elimines con ventanas/MCP activos. Cierra todos los procesos, conserva una copia del directorio y retira la guarda abandonada antes de reabrir.
-- Los módulos de `src/infrastructure/backup` están vendorizados en cada repositorio para que cada VSIX/CI sea independiente; los cambios al núcleo y sus pruebas deben aplicarse a las cinco copias.
+- Initial maximum: **64 MiB of uncompressed content and 10,000 entries** per snapshot. The decompressed manifest has a separate 128 MiB limit. Exceeding a limit reports an error instead of truncating the backup.
+- Symlinks are not followed, and absolute or traversal paths are not extracted. Hashes detect accidental corruption. An unencrypted backup provides no authenticity against someone who can modify it; restore only trusted copies.
+- **Old backups are not deleted automatically** in this version. Monitor local and Drive storage and remove old copies only after verifying that a recent backup can be restored. Previous data generations are not removed automatically either.
+- OAuth files, tokens, the optional passphrase, caches, temporary files, and runtime binaries are not part of a backup.
+- Tracker releases include two VSIX files: `win32-x64` for Windows x64 and `linux-x64` for Linux x64 with glibc. Install the package that matches the computer. ARM64, Alpine/musl, and macOS are not supported. Backup files are portable between the two supported platforms.
+- Backups do not include the installed extension. Reinstall a compatible VSIX before restoring. Restore validates the extension ID and schema version.
+- Two computers create distinct snapshots. This does **not** resolve simultaneous changes like a future synchronization service will; deliberately choose which snapshot to restore.
+- A very specific abrupt shutdown can leave a `.lock.recovering` guard that blocks writes. Do not remove it while windows or MCP processes are active. Close every process, retain a copy of the directory, and remove the abandoned guard before reopening.
+- The modules under `src/infrastructure/backup` are vendored in each repository so every VSIX and CI pipeline remains independent. Apply backup-core changes and their tests to all five copies.
 
-## Supabase: siguiente fase
+## Supabase: next phase
 
-No hay conexión ni credenciales de Supabase implementadas. Cuando se añada necesitaremos URL del proyecto, **publishable key** e inicio de sesión del usuario (por ejemplo OAuth con PKCE), además de permisos RLS y el protocolo de sincronización con versiones, outbox y conflictos. La clave pública identifica la aplicación; no sustituye la sesión del usuario. No debe ponerse una clave `service_role` o secret key en una extensión distribuida. [Claves públicas y autenticación de Supabase](https://supabase.com/docs/guides/getting-started/api-keys).
+No Supabase connection or credentials are implemented. A future implementation will require the project URL, a **publishable key**, and user sign-in such as OAuth with PKCE, along with RLS policies and a versioned synchronization protocol with an outbox and conflict handling. The public key identifies the application; it does not replace a user session. Never put a `service_role` or secret key in a distributed extension. See [Supabase API keys and authentication](https://supabase.com/docs/guides/getting-started/api-keys).
 
-## Verificación antes de confiar en el backup
+## Verify before relying on backups
 
-La compilación y las pruebas automáticas cubren archivos, restauración, cifrado opcional, concurrencia y flujos OAuth/Drive con respuestas simuladas. **La conexión real a tu cuenta y una subida/descarga real requieren tu autorización y deben comprobarse antes de depender del respaldo.**
+Builds and automated tests cover files, restore, optional encryption, concurrency, and OAuth/Drive flows with mocked responses. **A real connection to your account and a real upload/download require your authorization and must be verified before you rely on the backup.**
 
-Haz una prueba con contenido no sensible: crea una nota y adjunto, sube un backup, descárgalo desde Drive y restáuralo en un perfil limpio. Comprueba también el último estado remoto después de habilitar los backups automáticos.
+Test with non-sensitive content: create a note and attachment, upload a backup, download it from Drive, and restore it in a clean profile. Also inspect the latest remote status after enabling automatic backups.

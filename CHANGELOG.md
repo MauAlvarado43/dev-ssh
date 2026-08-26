@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Rewrote the backup and recovery guide in English and updated the DevTracker platform-package guidance.
+
 ## [0.2.0] - 2026-08-26
 
 ### Added
