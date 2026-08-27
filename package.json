@@ -2,7 +2,7 @@
   "name": "dev-ssh",
   "displayName": "Dev SSH",
   "description": "%extension.description%",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "packageManager": "pnpm@11.1.3",
   "publisher": "raide",
   "license": "MIT",
@@ -23,6 +23,7 @@
       {"command": "devSsh.restoreBackup", "title": "%command.restoreBackup.title%", "category": "Dev SSH"},
       {"command": "devSsh.setBackupPassphrase", "title": "%command.setBackupPassphrase.title%", "category": "Dev SSH"},
       {"command": "devSsh.backupStatus", "title": "%command.backupStatus.title%", "category": "Dev SSH"},
+      {"command": "devSsh.openBackupSettings", "title": "%command.openBackupSettings.title%", "category": "Dev SSH", "icon": "$(cloud)"},
       { "command": "devSsh.addGroup", "title": "%command.addGroup.title%", "category": "Dev SSH", "icon": "$(new-folder)" },
       { "command": "devSsh.addServer", "title": "%command.addServer.title%", "category": "Dev SSH", "icon": "$(add)" },
       { "command": "devSsh.searchServers", "title": "%command.searchServers.title%", "category": "Dev SSH", "icon": "$(search)" },
@@ -43,7 +44,8 @@
         { "command": "devSsh.searchServers", "when": "view == devSsh.servers", "group": "navigation@1" },
         { "command": "devSsh.addServer", "when": "view == devSsh.servers", "group": "navigation@2" },
         { "command": "devSsh.addGroup", "when": "view == devSsh.servers", "group": "navigation@3" },
-        { "command": "devSsh.refresh", "when": "view == devSsh.servers", "group": "navigation@4" }
+        { "command": "devSsh.refresh", "when": "view == devSsh.servers", "group": "navigation@4" },
+        { "command": "devSsh.openBackupSettings", "when": "view == devSsh.servers", "group": "navigation@99" }
       ]
     },
     "configuration": {

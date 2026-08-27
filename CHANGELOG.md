@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-26
+
+### Added
+
+- Added a visible backup management panel with Drive connection status, automatic scheduling, manual backup and restore actions, local snapshots, and optional encryption controls.
+
 ### Changed
 
 - Rewrote the backup and recovery guide in English and updated the DevTracker platform-package guidance.

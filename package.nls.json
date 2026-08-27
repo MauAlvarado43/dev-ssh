@@ -22,5 +22,6 @@
   "configuration.backup.autoEnabled.description": "Create snapshots while VS Code is open; upload them when Drive is connected. Disabled by default. Unencrypted backups may contain readable secrets.",
   "configuration.backup.intervalMinutes.description": "Minutes between automatic backups when data changes. Failed uploads are retried without replacing old snapshots.",
   "configuration.backup.encrypt.description": "Optional passphrase encryption. Off by default: recovery only needs the backup file. If enabled, keep the passphrase outside this PC.",
-  "configuration.backup.includePrivateKeys.description": "Include managed SSH private keys. Requires optional encryption and a recovery passphrase."
+  "configuration.backup.includePrivateKeys.description": "Include managed SSH private keys. Requires optional encryption and a recovery passphrase.",
+  "command.openBackupSettings.title": "Open backup settings"
 }

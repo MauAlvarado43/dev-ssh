@@ -22,5 +22,6 @@
   "configuration.backup.autoEnabled.description": "Crear snapshots mientras VS Code esté abierto; subirlos cuando Drive esté conectado. Desactivado por defecto. Los backups sin cifrado pueden contener secretos legibles.",
   "configuration.backup.intervalMinutes.description": "Minutos entre backups automáticos cuando cambian los datos. Se reintentan las subidas fallidas sin reemplazar snapshots anteriores.",
   "configuration.backup.encrypt.description": "Cifrado opcional con contraseña. Desactivado por defecto: para recuperar basta el archivo. Si lo activas, guarda la contraseña fuera de esta PC.",
-  "configuration.backup.includePrivateKeys.description": "Incluir las llaves privadas SSH administradas. Requiere activar el cifrado opcional y definir una contraseña de recuperación."
+  "configuration.backup.includePrivateKeys.description": "Incluir las llaves privadas SSH administradas. Requiere activar el cifrado opcional y definir una contraseña de recuperación.",
+  "command.openBackupSettings.title": "Abrir configuración de backups"
 }

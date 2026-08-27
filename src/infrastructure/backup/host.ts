@@ -17,6 +17,23 @@ const tokenKey = 'backup.google.tokens.v1';
 const passwordKey = 'backup.passphrase.v1';
 const errorMessage = (e: unknown): string => e instanceof Error ? e.message : String(e);
 
+interface BackupSettingsState {
+  automatic: boolean;
+  busy: boolean;
+  connected: boolean;
+  encrypted: boolean;
+  environment: string;
+  error?: string;
+  intervalMinutes: number;
+  lastLocal?: string;
+  lastRemote?: string;
+  nextRun?: number;
+  passphraseConfigured: boolean;
+  pendingUploads: number;
+  privateKeys?: boolean;
+  supportsPrivateKeys: boolean;
+}
+
 export async function initializeLocal(context: vscode.ExtensionContext, namespace: string, legacyKeys: string[] = []): Promise<{ root: vscode.Uri; preferences: PrivatePreferences }> {
   if (vscode.workspace.getConfiguration(namespace).get('environment', 'local') !== 'local') throw new Error('Only the local environment is available. Supabase is not implemented.');
   const root = await activeRoot(context.globalStorageUri.fsPath);
@@ -44,6 +61,7 @@ export class BackupController implements vscode.Disposable {
   private timer: NodeJS.Timeout;
   private busy = false;
   private disposed = false;
+  private settingsPanel: vscode.WebviewPanel | undefined;
   private readonly output: vscode.OutputChannel;
   private readonly disposables: vscode.Disposable[] = [];
   private readonly metadata: SharedJsonFile<{ lastHash?: string; nextRun?: number; local?: string; remote?: string; error?: string }>;
@@ -54,10 +72,12 @@ export class BackupController implements vscode.Disposable {
       this.disposables.push(vscode.commands.registerCommand(`${namespace}.${name}`, async () => {
         if (this.busy) { void vscode.window.showWarningMessage(this.t('Hay una operación de backup en curso.', 'A backup operation is already running.')); return; }
         this.busy = true;
+        void this.postSettingsState();
         try { await action(); } catch (e) { this.output.appendLine(errorMessage(e)); void vscode.window.showErrorMessage(errorMessage(e)); }
-        finally { this.busy = false; }
+        finally { this.busy = false; void this.postSettingsState(); }
       }));
     };
+    this.disposables.push(vscode.commands.registerCommand(`${namespace}.openBackupSettings`, () => this.openSettingsPanel()));
     command('connectDrive', () => this.connect());
     command('disconnectDrive', async () => {
       await context.secrets.delete(tokenKey); await context.secrets.delete(credentialKey);
@@ -75,6 +95,7 @@ export class BackupController implements vscode.Disposable {
     this.timer = setInterval(() => { void this.tick().catch((e) => this.output.appendLine(errorMessage(e))); }, 60000);
     this.timer.unref();
     this.disposables.push(vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration(`${namespace}.backup`) || event.affectsConfiguration(`${namespace}.environment`)) void this.postSettingsState();
       if (event.affectsConfiguration(`${namespace}.backup.autoEnabled`) && this.config.get('backup.autoEnabled', false)) {
         void vscode.window.showWarningMessage(this.t('Backups automáticos activos mientras VS Code está abierto. Sin cifrado adicional, los archivos pueden contener secretos legibles. Revisa las exclusiones y guarda una copia fuera de esta PC.', 'Automatic backups run while VS Code is open. Without additional encryption, files may contain readable secrets. Review exclusions and keep a copy outside this PC.'));
       }
@@ -84,6 +105,118 @@ export class BackupController implements vscode.Disposable {
   private get backupDirectory(): string { return path.join(this.context.globalStorageUri.fsPath, 'backups'); }
   private get extension(): string { return this.context.extension.id; }
   private t(es: string, en: string): string { return this.config.get('language', vscode.env.language).startsWith('es') ? es : en; }
+  private supportsSetting(name: string): boolean {
+    const properties = this.context.extension.packageJSON.contributes?.configuration?.properties as Record<string, unknown> | undefined;
+    return Boolean(properties?.[`${this.namespace}.${name}`]);
+  }
+  private async settingsState(): Promise<BackupSettingsState> {
+    const metadata = (await this.metadata.read())?.value ?? {};
+    let pendingUploads = 0;
+    try { pendingUploads = (await fs.readdir(this.backupDirectory)).filter((name) => name.endsWith('.devbackup.pending')).length; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    const supportsPrivateKeys = this.supportsSetting('backup.includePrivateKeys');
+    return {
+      automatic: this.config.get('backup.autoEnabled', false),
+      busy: this.busy,
+      connected: Boolean(await this.context.secrets.get(credentialKey) && await this.context.secrets.get(tokenKey)),
+      encrypted: this.config.get('backup.encrypt', false),
+      environment: this.config.get('environment', 'local'),
+      error: metadata.error,
+      intervalMinutes: Math.max(5, Math.min(1440, Number(this.config.get('backup.intervalMinutes', 30)) || 30)),
+      lastLocal: metadata.local ? path.basename(metadata.local) : undefined,
+      lastRemote: metadata.remote,
+      nextRun: metadata.nextRun,
+      passphraseConfigured: Boolean(await this.context.secrets.get(passwordKey)),
+      pendingUploads,
+      privateKeys: supportsPrivateKeys ? this.config.get('backup.includePrivateKeys', false) : undefined,
+      supportsPrivateKeys
+    };
+  }
+  private async postSettingsState(): Promise<void> {
+    if (!this.settingsPanel) return;
+    try { await this.settingsPanel.webview.postMessage({ type: 'state', value: await this.settingsState() }); }
+    catch (error) { this.output.appendLine(errorMessage(error)); }
+  }
+  private async updateBackupSetting(key: string, value: unknown): Promise<void> {
+    const booleans = new Set(['backup.autoEnabled', 'backup.encrypt', 'backup.includePrivateKeys']);
+    if (booleans.has(key)) {
+      if (typeof value !== 'boolean' || !this.supportsSetting(key)) throw new Error('Invalid backup setting.');
+      await this.config.update(key, value, vscode.ConfigurationTarget.Global);
+      return;
+    }
+    if (key === 'backup.intervalMinutes') {
+      const minutes = Number(value);
+      if (!Number.isInteger(minutes) || minutes < 5 || minutes > 1440) throw new Error(this.t('El intervalo debe estar entre 5 y 1440 minutos.', 'The interval must be between 5 and 1440 minutes.'));
+      await this.config.update(key, minutes, vscode.ConfigurationTarget.Global);
+      return;
+    }
+    throw new Error('Invalid backup setting.');
+  }
+  private openSettingsPanel(): void {
+    if (this.settingsPanel) { this.settingsPanel.reveal(vscode.ViewColumn.One); void this.postSettingsState(); return; }
+    const title = `${this.context.extension.packageJSON.displayName} · ${this.t('Backups', 'Backups')}`;
+    const panel = vscode.window.createWebviewPanel(`${this.namespace}.backupSettings`, title, vscode.ViewColumn.One, { enableScripts: true, retainContextWhenHidden: true });
+    this.settingsPanel = panel;
+    panel.webview.html = this.settingsHtml(panel.webview);
+    panel.onDidDispose(() => { if (this.settingsPanel === panel) this.settingsPanel = undefined; }, undefined, this.disposables);
+    panel.webview.onDidReceiveMessage(async (message: unknown) => {
+      if (!message || typeof message !== 'object') return;
+      const value = message as { type?: unknown; action?: unknown; key?: unknown; value?: unknown };
+      try {
+        if (value.type === 'ready') await this.postSettingsState();
+        else if (value.type === 'update' && typeof value.key === 'string') { await this.updateBackupSetting(value.key, value.value); await this.postSettingsState(); }
+        else if (value.type === 'action' && typeof value.action === 'string') {
+          const commands = new Set(['connectDrive', 'disconnectDrive', 'backupNow', 'restoreBackup', 'setBackupPassphrase', 'backupStatus']);
+          if (!commands.has(value.action)) throw new Error('Invalid backup action.');
+          await vscode.commands.executeCommand(`${this.namespace}.${value.action}`);
+          await this.postSettingsState();
+        } else if (value.type === 'openFolder') {
+          await fs.mkdir(this.backupDirectory, { recursive: true, mode: 0o700 });
+          await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(this.backupDirectory));
+        } else if (value.type === 'openSettings') {
+          await vscode.commands.executeCommand('workbench.action.openSettings', `@ext:${this.extension} backup`);
+        }
+      } catch (error) {
+        this.output.appendLine(errorMessage(error));
+        void vscode.window.showErrorMessage(errorMessage(error));
+      }
+    }, undefined, this.disposables);
+    void this.postSettingsState();
+  }
+  private settingsHtml(webview: vscode.Webview): string {
+    const nonce = randomUUID().replaceAll('-', '');
+    const es = this.config.get('language', vscode.env.language).startsWith('es');
+    const labels = es ? {
+      title: 'Backups y recuperación', subtitle: 'Copias privadas de esta extensión. Cada dispositivo crea archivos únicos para evitar sobrescribir a otros.',
+      environment: 'Entorno', drive: 'Google Drive', connected: 'Conectado', disconnected: 'No conectado', connect: 'Conectar Drive', disconnect: 'Desconectar',
+      automatic: 'Backups automáticos', autoHelp: 'Se ejecutan mientras VS Code está abierto y sólo crean una copia cuando cambian los datos.', interval: 'Intervalo (minutos)',
+      encryption: 'Cifrado opcional', encryptionHelp: 'Desactivado por defecto. Si lo activas, conserva la contraseña fuera de esta computadora.', passphrase: 'Configurar contraseña', configured: 'Contraseña configurada', missing: 'Sin contraseña configurada',
+      privateKeys: 'Incluir llaves SSH privadas', privateHelp: 'Requiere cifrado y contraseña de recuperación.', actions: 'Recuperación manual', backup: 'Crear backup ahora', restore: 'Restaurar backup', folder: 'Abrir carpeta local', log: 'Ver estado detallado', vscode: 'Abrir Settings de VS Code',
+      lastLocal: 'Último archivo local', lastRemote: 'Última subida a Drive', nextRun: 'Próxima revisión', pending: 'Subidas pendientes', none: 'Todavía no hay backups', error: 'Último error', busy: 'Operación en curso…', ready: 'Listo'
+    } : {
+      title: 'Backups and recovery', subtitle: 'Private snapshots for this extension. Every device creates unique files so other devices are never overwritten.',
+      environment: 'Environment', drive: 'Google Drive', connected: 'Connected', disconnected: 'Not connected', connect: 'Connect Drive', disconnect: 'Disconnect',
+      automatic: 'Automatic backups', autoHelp: 'They run while VS Code is open and only create a snapshot when data changes.', interval: 'Interval (minutes)',
+      encryption: 'Optional encryption', encryptionHelp: 'Off by default. If enabled, keep the passphrase outside this computer.', passphrase: 'Set passphrase', configured: 'Passphrase configured', missing: 'No passphrase configured',
+      privateKeys: 'Include private SSH keys', privateHelp: 'Requires encryption and a recovery passphrase.', actions: 'Manual recovery', backup: 'Create backup now', restore: 'Restore backup', folder: 'Open local folder', log: 'Show detailed status', vscode: 'Open VS Code Settings',
+      lastLocal: 'Latest local file', lastRemote: 'Latest Drive upload', nextRun: 'Next check', pending: 'Pending uploads', none: 'No backups yet', error: 'Latest error', busy: 'Operation in progress…', ready: 'Ready'
+    };
+    const json = JSON.stringify(labels).replaceAll('<', '\\u003c');
+    return `<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';"><style nonce="${nonce}">
+      :root{color-scheme:light dark}*{box-sizing:border-box}body{margin:0;padding:28px;color:var(--vscode-foreground);background:var(--vscode-editor-background);font:13px/1.5 var(--vscode-font-family)}main{max-width:920px;margin:auto}header{margin-bottom:22px}h1{margin:0 0 6px;font-size:24px}h2{margin:0 0 14px;font-size:15px}.muted{color:var(--vscode-descriptionForeground)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}.card{padding:18px;border:1px solid var(--vscode-widget-border);border-radius:10px;background:var(--vscode-sideBar-background)}.row{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:11px 0}.row:first-of-type{margin-top:0}.stack{display:grid;gap:8px}.status{display:inline-flex;align-items:center;gap:6px}.dot{width:8px;height:8px;border-radius:50%;background:var(--vscode-testing-iconFailed)}.dot.on{background:var(--vscode-testing-iconPassed)}button,input{font:inherit}button{padding:7px 11px;border:1px solid var(--vscode-button-border,transparent);border-radius:5px;color:var(--vscode-button-foreground);background:var(--vscode-button-background);cursor:pointer}button:hover{background:var(--vscode-button-hoverBackground)}button.secondary{color:var(--vscode-button-secondaryForeground);background:var(--vscode-button-secondaryBackground)}button.secondary:hover{background:var(--vscode-button-secondaryHoverBackground)}button:disabled,input:disabled{opacity:.55;cursor:not-allowed}input[type=number]{width:86px;padding:5px 7px;color:var(--vscode-input-foreground);background:var(--vscode-input-background);border:1px solid var(--vscode-input-border)}input[type=checkbox]{accent-color:var(--vscode-focusBorder)}.actions{display:flex;flex-wrap:wrap;gap:8px}.facts{margin:18px 0 0}.fact{display:grid;grid-template-columns:150px 1fr;gap:12px;padding:8px 0;border-bottom:1px solid var(--vscode-widget-border);overflow-wrap:anywhere}.error{margin-top:14px;padding:10px;border-left:3px solid var(--vscode-testing-iconFailed);background:var(--vscode-inputValidation-errorBackground);color:var(--vscode-inputValidation-errorForeground)}#private-row[hidden],#error[hidden]{display:none}.footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px}.busy{color:var(--vscode-descriptionForeground)}@media(max-width:520px){body{padding:18px}.fact{grid-template-columns:1fr;gap:2px}}
+    </style></head><body><main><header><h1>${labels.title}</h1><div class="muted">${labels.subtitle}</div></header><div class="grid">
+      <section class="card"><h2>${labels.drive}</h2><div class="row"><span class="status"><span id="drive-dot" class="dot"></span><strong id="drive-state">${labels.disconnected}</strong></span><div class="actions"><button id="connect">${labels.connect}</button><button id="disconnect" class="secondary">${labels.disconnect}</button></div></div><div class="row"><span>${labels.environment}</span><strong id="environment">local</strong></div></section>
+      <section class="card"><h2>${labels.automatic}</h2><div class="row"><span class="muted">${labels.autoHelp}</span><input id="automatic" type="checkbox"></div><div class="row"><label for="interval">${labels.interval}</label><input id="interval" type="number" min="5" max="1440" step="1"></div></section>
+      <section class="card"><h2>${labels.encryption}</h2><div class="row"><span class="muted">${labels.encryptionHelp}</span><input id="encrypted" type="checkbox"></div><div class="row"><span id="passphrase-state" class="muted">${labels.missing}</span><button id="passphrase" class="secondary">${labels.passphrase}</button></div><div id="private-row" hidden><div class="row"><span><strong>${labels.privateKeys}</strong><br><span class="muted">${labels.privateHelp}</span></span><input id="private-keys" type="checkbox"></div></div></section>
+      <section class="card"><h2>${labels.actions}</h2><div class="actions"><button id="backup">${labels.backup}</button><button id="restore" class="secondary">${labels.restore}</button><button id="folder" class="secondary">${labels.folder}</button><button id="log" class="secondary">${labels.log}</button></div></section>
+    </div><section class="card facts"><div class="fact"><strong>${labels.lastLocal}</strong><span id="last-local">${labels.none}</span></div><div class="fact"><strong>${labels.lastRemote}</strong><span id="last-remote">—</span></div><div class="fact"><strong>${labels.nextRun}</strong><span id="next-run">—</span></div><div class="fact"><strong>${labels.pending}</strong><span id="pending">0</span></div><div id="error" class="error" hidden><strong>${labels.error}</strong><div id="error-text"></div></div></section><div class="footer"><button id="vscode" class="secondary">${labels.vscode}</button><span id="activity" class="busy">${labels.ready}</span></div>
+    </main><script nonce="${nonce}">
+      const vscode=acquireVsCodeApi(),labels=${json};const byId=id=>document.getElementById(id);const action=(id,name)=>byId(id).addEventListener('click',()=>vscode.postMessage({type:'action',action:name}));
+      action('connect','connectDrive');action('disconnect','disconnectDrive');action('backup','backupNow');action('restore','restoreBackup');action('passphrase','setBackupPassphrase');action('log','backupStatus');byId('folder').addEventListener('click',()=>vscode.postMessage({type:'openFolder'}));byId('vscode').addEventListener('click',()=>vscode.postMessage({type:'openSettings'}));
+      byId('automatic').addEventListener('change',e=>vscode.postMessage({type:'update',key:'backup.autoEnabled',value:e.target.checked}));byId('encrypted').addEventListener('change',e=>vscode.postMessage({type:'update',key:'backup.encrypt',value:e.target.checked}));byId('private-keys').addEventListener('change',e=>vscode.postMessage({type:'update',key:'backup.includePrivateKeys',value:e.target.checked}));byId('interval').addEventListener('change',e=>vscode.postMessage({type:'update',key:'backup.intervalMinutes',value:Number(e.target.value)}));
+      const date=value=>value?new Date(value).toLocaleString(): '—';window.addEventListener('message',event=>{if(event.data?.type!=='state')return;const s=event.data.value;byId('automatic').checked=s.automatic;byId('encrypted').checked=s.encrypted;byId('interval').value=String(s.intervalMinutes);byId('private-keys').checked=Boolean(s.privateKeys);byId('private-row').hidden=!s.supportsPrivateKeys;byId('environment').textContent=s.environment;byId('drive-dot').classList.toggle('on',s.connected);byId('drive-state').textContent=s.connected?labels.connected:labels.disconnected;byId('connect').hidden=s.connected;byId('disconnect').hidden=!s.connected;byId('passphrase-state').textContent=s.passphraseConfigured?labels.configured:labels.missing;byId('last-local').textContent=s.lastLocal||labels.none;byId('last-remote').textContent=date(s.lastRemote);byId('next-run').textContent=s.automatic?date(s.nextRun):'—';byId('pending').textContent=String(s.pendingUploads);byId('error').hidden=!s.error;byId('error-text').textContent=s.error||'';byId('activity').textContent=s.busy?labels.busy:labels.ready;document.querySelectorAll('button,input').forEach(el=>{if(el.id!=='vscode')el.disabled=s.busy});});vscode.postMessage({type:'ready'});
+    </script></body></html>`;
+  }
   private async drive(): Promise<DriveClient | undefined> {
     const credentials = await this.context.secrets.get(credentialKey), tokens = await this.context.secrets.get(tokenKey);
     if (!credentials || !tokens) return undefined;
@@ -231,7 +364,7 @@ export class BackupController implements vscode.Disposable {
     } finally { if (!activated) await fs.rm(destination, { recursive: true, force: true }); }
     await vscode.commands.executeCommand('workbench.action.reloadWindow');
   }
-  dispose(): void { this.disposed = true; clearInterval(this.timer); for (const d of this.disposables) d.dispose(); this.output.dispose(); }
+  dispose(): void { this.disposed = true; clearInterval(this.timer); this.settingsPanel?.dispose(); for (const d of this.disposables) d.dispose(); this.output.dispose(); }
 }
 
 export async function captureFiles(root: string, names: string[]): Promise<BackupFile[]> {
